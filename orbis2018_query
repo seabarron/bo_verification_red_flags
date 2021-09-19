@@ -1,0 +1,56 @@
+## creating only_uk_terminal table, for only_uk_terminal.csv.gz 
+
+CREATE TABLE only_uk_terminal AS
+SELECT BvD
+FROM GUOscurrent
+WHERE 
+SUBSTR(BvD,1,2) = "GB" #first 2 characters are GB
+AND
+BvD NOT IN (SELECT shareholderBvD FROM ownershipCurrent WHERE directNumber > 50)
+
+
+
+## query for uk_terminals_nodups.gz
+
+SELECT r2.BvD, r3.*,
+r4.companyName, r4.postcode, r4.city, r4.iso2, r4.region, r4.typeRegion, r4.standardisedLegalForm, r4.nationalLegalForm, r4.typeEntity, r4.entityType, r4.status,
+r5.shareholderBvD, r5.directNumber, r5.totalNumber,
+r6.*
+#all uk terminal
+FROM only_uk_terminal AS r1
+#find their GUOs
+JOIN GUOscurrent AS r2 ON r1.BvD = r2.BvD
+#find other companies in the group
+JOIN GUOscurrent AS r3 ON r2.GUO50 = r3.GUO50
+#add other info on the subsidiaries
+LEFT OUTER JOIN entitiesALL AS r4 ON r3.BvD = r4.BvD
+#add info on shareholders
+LEFT OUTER JOIN ownershipCurrent AS r5 ON r3.BvD = r5.subsidiaryBvD
+#add info on financials
+LEFT OUTER JOIN recentFinancials as r6 ON r3.BvD = r6.BvD
+#keep only ownership relations
+WHERE r5.directNumber > 50
+
+
+
+## query for only_uk_terminal_ownership.csv.gz
+
+SELECT r1.BvD, r2.subsidiaryBvD, r2.directNumber, r2.totalNumber, r3.shareholderBvD, r3.directNumber, r3.totalNumber, r4.entityType, r5.entityType 
+FROM only_uk_terminal AS r1
+LEFT OUTER JOIN ownershipCurrent AS r2 
+ON r1.BvD = r2.shareholderBvD
+LEFT OUTER JOIN ownershipCurrent AS r3
+ON r1.BvD = r3.subsidiaryBvD
+LEFT OUTER JOIN entitiesALL AS r4
+ON r1.BvD = r4.BvD
+LEFT OUTER JOIN entitiesALL AS r5
+ON r3.shareholderBvD = r5.BvD
+
+
+
+## query for missing_data.csv.gz
+# after creating missing_guo2 from bvds in missing_guo.csv and missing_sh_nonguo.csv 
+
+SELECT r1.BvD,r4.companyName, r4.postcode, r4.city, r4.iso2, r4.region, r4.typeRegion, r4.standardisedLegalForm, r4.nationalLegalForm, r4.typeEntity, r4.entityType, r4.status
+FROM missing_guo2 AS r1 
+JOIN entitiesALL AS r4 on r1.BvD = r4.BvD

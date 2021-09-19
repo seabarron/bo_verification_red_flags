@@ -1,0 +1,901 @@
+---
+title: "Dissertation Analysis"
+output: html_notebook
+---
+
+
+
+```{r}
+library(tidyverse)
+library(reticulate)
+library(readxl)
+library(here)
+library(solitude)
+library(randomForest)
+library(caTools)
+library(caret)
+
+here::i_am("red_flag_code.Rmd")
+source(here("functions/sic_to_section_20210513.R"))
+```
+
+
+```{r}
+# IMPORT DATA 
+
+chain_features <- read_excel(here("data/sample_2_chain_features.csv"))
+bvd_by_layer <- read_csv(here("data/sample_2_bvd_by_layer.csv.gz"))
+country_by_layer <- read_csv(here("data/sample_2_country_by_layer.csv.gz"))
+secrecy_scores <- read_excel(here("data/FSI-Rankings.xlsx"), sheet = "secrecy_scores")
+late_filing <- read_excel(here("data/sample_2_late_filing_companies.xlsx"), sheet = "Results")
+```
+
+```{r}
+# ADD COUNTRIES PRESENT IN CHAIN
+
+# filter bvd for the correct terminal companies
+bvd_by_layer <- bvd_by_layer %>%
+  filter(layer0 %in% chain_features$terminal_bvd)
+
+# filter country for the same ones
+country_by_layer <- country_by_layer %>%
+  filter(X1 %in% bvd_by_layer$X1)
+
+# add terminal to then merge iso2 to chain features
+terminal_bvd <- bvd_by_layer %>%
+  select(X1, layer0) %>%
+  rename(terminal_bvd = layer0)
+
+# merge
+country_by_layer <- country_by_layer %>%
+  left_join(terminal_bvd)
+
+# rename iso2 layers
+country_by_layer <- country_by_layer %>%
+  select(!c(X1, layer0)) %>%
+  rename(layer1_iso2 = 1,
+         layer2_iso2 = 2,
+         layer3_iso2 = 3,
+         layer4_iso2 = 4,
+         layer5_iso2 = 5,
+         layer6_iso2 = 6,
+         layer7_iso2 = 7,
+         layer8_iso2 = 8,
+         layer9_iso2 = 9,
+         layer10_iso2 = 10,
+         layer11_iso2 = 11,
+         layer12_iso2 = 12,
+         layer13_iso2 = 13,
+         layer14_iso2 = 14,
+         layer15_iso2 = 15,
+         layer16_iso2 = 16,
+         layer17_iso2 = 17,
+         layer18_iso2 = 18,
+         layer19_iso2 = 19,
+         layer20_iso2 = 20,
+         layer21_iso2 = 21,
+         layer22_iso2 = 22,
+         layer23_iso2 = 23)
+
+# merge iso2 onto chain_features
+chain_features <- chain_features %>%
+  left_join(country_by_layer)
+
+```
+
+
+KI-3
+KI-6
+Cat-1
+Cat-2
+SS
+
+for each chain get:
+  - average
+  - maximum 
+
+
+SS for BO nationality 
+Cat-1 & Cat-2 for iso2 in chain
+
+
+-if YY in chain, replace each measure with mean of that measure (from FSI data)
+- could include a cat variable for BO nationality - not I, GB, not GB
+- if guo is not an individual, red-flag
+
+
+- were those with 0 layers removed - yes
+- those with 0 layers removed as some of the features can't be created (those dependent on having an ownership structure).
+- those with 0 layers are partially verified through knowing all the chain, and less of a concern to red flag
+- this analysis focuses on those with ownership chains
+
+```{r}
+# ADD FINANCIAL SECRECY INDEX DATA
+
+secrecy_scores <- secrecy_scores %>%
+  select(`ISO-2`, `KI-15`, `KI cat 1`, `KI cat 2`, SS) %>%
+  rename(iso2 = 1, cat1 = 2, cat2 = 3, ss = 4, ki15 = 5)
+
+# Replace YY with means
+mean_cat1 <- mean(secrecy_scores$cat1, na.rm = T)
+mean_cat2 <- mean(secrecy_scores$cat2, na.rm = T)
+mean_ki15 <- mean(secrecy_scores$ki15, na.rm = T)
+mean_ss <- mean(secrecy_scores$ss, na.rm = T)
+
+# merge score onto chain features
+secrecy_scores <- secrecy_scores %>%
+  add_case(iso2 = "YY",
+         cat1 = mean_cat1,
+         cat2 = mean_cat2,
+         ki15 = mean_ki15,
+         ss = mean_ss)
+
+secrecy_scores <- secrecy_scores %>%
+  add_case(iso2 = "ZZ",
+         cat1 = mean_cat1,
+         cat2 = mean_cat2,
+         ki15 = mean_ki15,
+         ss = mean_ss)
+
+layer1_secrecy_scores <- secrecy_scores %>%
+  rename(layer1_iso2 = 1,
+         layer1_cat1 = 2,
+         layer1_cat2 = 3,
+         layer1_ss = 4,
+         layer1_ki15 = 5)
+chain_features <- chain_features %>%
+  left_join(layer1_secrecy_scores)
+
+layer2_secrecy_scores <- secrecy_scores %>%
+  rename(layer2_iso2 = 1,
+         layer2_cat1 = 2,
+         layer2_cat2 = 3,
+         layer2_ss = 4,
+         layer2_ki15 = 5)
+chain_features <- chain_features %>%
+  left_join(layer2_secrecy_scores)
+
+layer3_secrecy_scores <- secrecy_scores %>%
+  rename(layer3_iso2 = 1,
+         layer3_cat1 = 2,
+         layer3_cat2 = 3,
+         layer3_ss = 4,
+         layer3_ki15 = 5)
+chain_features <- chain_features %>%
+  left_join(layer3_secrecy_scores)
+
+layer4_secrecy_scores <- secrecy_scores %>%
+  rename(layer4_iso2 = 1,
+         layer4_cat1 = 2,
+         layer4_cat2 = 3,
+         layer4_ss = 4,
+         layer4_ki15 = 5)
+chain_features <- chain_features %>%
+  left_join(layer4_secrecy_scores)
+
+layer5_secrecy_scores <- secrecy_scores %>%
+  rename(layer5_iso2 = 1,
+         layer5_cat1 = 2,
+         layer5_cat2 = 3,
+         layer5_ss = 4,
+         layer5_ki15 = 5)
+chain_features <- chain_features %>%
+  left_join(layer5_secrecy_scores)
+
+layer6_secrecy_scores <- secrecy_scores %>%
+  rename(layer6_iso2 = 1,
+         layer6_cat1 = 2,
+         layer6_cat2 = 3,
+         layer6_ss = 4,
+         layer6_ki15 = 5)
+chain_features <- chain_features %>%
+  left_join(layer6_secrecy_scores)
+
+layer7_secrecy_scores <- secrecy_scores %>%
+  rename(layer7_iso2 = 1,
+         layer7_cat1 = 2,
+         layer7_cat2 = 3,
+         layer7_ss = 4,
+         layer7_ki15 = 5)
+chain_features <- chain_features %>%
+  left_join(layer7_secrecy_scores)
+
+layer8_secrecy_scores <- secrecy_scores %>%
+  rename(layer8_iso2 = 1,
+         layer8_cat1 = 2,
+         layer8_cat2 = 3,
+         layer8_ss = 4,
+         layer8_ki15 = 5)
+chain_features <- chain_features %>%
+  left_join(layer8_secrecy_scores)
+
+layer9_secrecy_scores <- secrecy_scores %>%
+  rename(layer9_iso2 = 1,
+         layer9_cat1 = 2,
+         layer9_cat2 = 3,
+         layer9_ss = 4,
+         layer9_ki15 = 5)
+chain_features <- chain_features %>%
+  left_join(layer9_secrecy_scores)
+
+layer10_secrecy_scores <- secrecy_scores %>%
+  rename(layer10_iso2 = 1,
+         layer10_cat1 = 2,
+         layer10_cat2 = 3,
+         layer10_ss = 4,
+         layer10_ki15 = 5)
+chain_features <- chain_features %>%
+  left_join(layer10_secrecy_scores)
+
+layer11_secrecy_scores <- secrecy_scores %>%
+  rename(layer11_iso2 = 1,
+         layer11_cat1 = 2,
+         layer11_cat2 = 3,
+         layer11_ss = 4,
+         layer11_ki15 = 5)
+chain_features <- chain_features %>%
+  left_join(layer11_secrecy_scores)
+
+layer12_secrecy_scores <- secrecy_scores %>%
+  rename(layer12_iso2 = 1,
+         layer12_cat1 = 2,
+         layer12_cat2 = 3,
+         layer12_ss = 4,
+         layer12_ki15 = 5)
+chain_features <- chain_features %>%
+  left_join(layer12_secrecy_scores)
+
+layer13_secrecy_scores <- secrecy_scores %>%
+  rename(layer13_iso2 = 1,
+         layer13_cat1 = 2,
+         layer13_cat2 = 3,
+         layer13_ss = 4,
+         layer13_ki15 = 5)
+chain_features <- chain_features %>%
+  left_join(layer13_secrecy_scores)
+
+layer14_secrecy_scores <- secrecy_scores %>%
+  rename(layer14_iso2 = 1,
+         layer14_cat1 = 2,
+         layer14_cat2 = 3,
+         layer14_ss = 4,
+         layer14_ki15 = 5)
+chain_features <- chain_features %>%
+  left_join(layer14_secrecy_scores)
+
+layer15_secrecy_scores <- secrecy_scores %>%
+  rename(layer15_iso2 = 1,
+         layer15_cat1 = 2,
+         layer15_cat2 = 3,
+         layer15_ss = 4,
+         layer15_ki15 = 5)
+chain_features <- chain_features %>%
+  left_join(layer15_secrecy_scores)
+
+layer16_secrecy_scores <- secrecy_scores %>%
+  rename(layer16_iso2 = 1,
+         layer16_cat1 = 2,
+         layer16_cat2 = 3,
+         layer16_ss = 4,
+         layer16_ki15 = 5)
+chain_features <- chain_features %>%
+  left_join(layer16_secrecy_scores)
+
+layer17_secrecy_scores <- secrecy_scores %>%
+  rename(layer17_iso2 = 1,
+         layer17_cat1 = 2,
+         layer17_cat2 = 3,
+         layer17_ss = 4,
+         layer17_ki15 = 5)
+chain_features <- chain_features %>%
+  left_join(layer17_secrecy_scores)
+
+layer18_secrecy_scores <- secrecy_scores %>%
+  rename(layer18_iso2 = 1,
+         layer18_cat1 = 2,
+         layer18_cat2 = 3,
+         layer18_ss = 4,
+         layer18_ki15 = 5)
+chain_features <- chain_features %>%
+  left_join(layer18_secrecy_scores)
+
+layer19_secrecy_scores <- secrecy_scores %>%
+  rename(layer19_iso2 = 1,
+         layer19_cat1 = 2,
+         layer19_cat2 = 3,
+         layer19_ss = 4,
+         layer19_ki15 = 5)
+chain_features <- chain_features %>%
+  left_join(layer19_secrecy_scores)
+
+layer20_secrecy_scores <- secrecy_scores %>%
+  rename(layer20_iso2 = 1,
+         layer20_cat1 = 2,
+         layer20_cat2 = 3,
+         layer20_ss = 4,
+         layer20_ki15 = 5)
+chain_features <- chain_features %>%
+  left_join(layer20_secrecy_scores)
+
+layer21_secrecy_scores <- secrecy_scores %>%
+  rename(layer21_iso2 = 1,
+         layer21_cat1 = 2,
+         layer21_cat2 = 3,
+         layer21_ss = 4,
+         layer21_ki15 = 5)
+chain_features <- chain_features %>%
+  left_join(layer21_secrecy_scores)
+
+layer22_secrecy_scores <- secrecy_scores %>%
+  rename(layer22_iso2 = 1,
+         layer22_cat1 = 2,
+         layer22_cat2 = 3,
+         layer22_ss = 4,
+         layer22_ki15 = 5)
+chain_features <- chain_features %>%
+  left_join(layer22_secrecy_scores)
+
+layer23_secrecy_scores <- secrecy_scores %>%
+  rename(layer23_iso2 = 1,
+         layer23_cat1 = 2,
+         layer23_cat2 = 3,
+         layer23_ss = 4,
+         layer23_ki15 = 5)
+chain_features <- chain_features %>%
+  left_join(layer23_secrecy_scores)
+
+	
+# CLEAN GUO / BO 
+
+chain_features <- chain_features %>%
+  mutate(bo1 = case_when(guo_entity_type != "I" ~ 1, T ~ 0)) %>% # bo1 - not individuals
+  mutate(bo2 = case_when((bo1 == 0) & (guo_iso2 != "GB") ~ 1, T ~ 0)) %>% # bo2 - foreign individuals
+  mutate(bo3 = case_when((bo1 == 0) & (guo_iso2 == "GB") ~ 1, T ~ 0)) # bo3 - GB individuals
+
+
+
+# FILTER FOR COUNTRIES IN FSI
+chain_features <- chain_features %>%
+  filter(!is.na(layer1_cat1))
+  
+
+```
+
+
+
+```{r}
+
+# CREATE FSI FEATURES
+
+chain_features_ki15 <- chain_features %>%
+  pivot_longer(cols = c(layer1_ki15,
+                        layer2_ki15,
+                        layer3_ki15,
+                        layer4_ki15,
+                        layer5_ki15,
+                        layer6_ki15,
+                        layer7_ki15,
+                        layer8_ki15,
+                        layer9_ki15,
+                        layer10_ki15,
+                        layer11_ki15,
+                        layer12_ki15,
+                        layer13_ki15,
+                        layer14_ki15,
+                        layer15_ki15,
+                        layer16_ki15,
+                        layer17_ki15,
+                        layer18_ki15,
+                        layer19_ki15,
+                        layer20_ki15,
+                        layer21_ki15,
+                        layer22_ki15,
+                        layer23_ki15),
+               names_to = "ki15_layer",
+               values_to = "ki15_score")
+
+chain_features_ki15 <- chain_features_ki15 %>%
+  group_by(terminal_bvd) %>%
+  summarise(av_ki15 = mean(ki15_score, na.rm = T),
+            max_ki15 = max(ki15_score, na.rm = T))
+
+chain_features_cat1 <- chain_features %>%
+  pivot_longer(cols = c(layer1_cat1,
+                        layer2_cat1,
+                        layer3_cat1,
+                        layer4_cat1,
+                        layer5_cat1,
+                        layer6_cat1,
+                        layer7_cat1,
+                        layer8_cat1,
+                        layer9_cat1,
+                        layer10_cat1,
+                        layer11_cat1,
+                        layer12_cat1,
+                        layer13_cat1,
+                        layer14_cat1,
+                        layer15_cat1,
+                        layer16_cat1,
+                        layer17_cat1,
+                        layer18_cat1,
+                        layer19_cat1,
+                        layer20_cat1,
+                        layer21_cat1,
+                        layer22_cat1,
+                        layer23_cat1),
+               names_to = "cat1_layer",
+               values_to = "cat1_score")
+
+chain_features_cat1 <- chain_features_cat1 %>%
+  group_by(terminal_bvd) %>%
+  summarise(av_cat1 = mean(cat1_score, na.rm = T),
+            max_cat1 = max(cat1_score, na.rm = T))
+
+chain_features_cat2 <- chain_features %>%
+  pivot_longer(cols = c(layer1_cat2,
+                        layer2_cat2,
+                        layer3_cat2,
+                        layer4_cat2,
+                        layer5_cat2,
+                        layer6_cat2,
+                        layer7_cat2,
+                        layer8_cat2,
+                        layer9_cat2,
+                        layer10_cat2,
+                        layer11_cat2,
+                        layer12_cat2,
+                        layer13_cat2,
+                        layer14_cat2,
+                        layer15_cat2,
+                        layer16_cat2,
+                        layer17_cat2,
+                        layer18_cat2,
+                        layer19_cat2,
+                        layer20_cat2,
+                        layer21_cat2,
+                        layer22_cat2,
+                        layer23_cat2),
+               names_to = "cat2_layer",
+               values_to = "cat2_score")
+
+chain_features_cat2 <- chain_features_cat2 %>%
+  group_by(terminal_bvd) %>%
+  summarise(av_cat2 = mean(cat2_score, na.rm = T),
+            max_cat2 = max(cat2_score, na.rm = T))
+
+
+# SELECT AND MERGE REQUIRED FEATURES
+
+model_features <- chain_features %>%
+  select(terminal_bvd,
+         num_layers,
+         uk_layers_per,
+         bo1,
+         bo2,
+         bo3)
+
+model_features <- model_features %>%
+  left_join(chain_features_cat1) %>%
+  left_join(chain_features_cat2) %>%
+  left_join(chain_features_ki15)
+
+
+
+# LATE FILING / SIC
+
+late_filing <- late_filing %>%
+  select(3, 9) %>%
+  rename(terminal_bvd = 1,
+         sic_1 = 2) %>%
+  mutate(late_filing = 1)
+
+late_filing <- sic_to_section(late_filing, sic_1, 1)
+
+late_filing <- late_filing %>%
+  select(terminal_bvd,
+         late_filing,
+         sic_section_name_1)
+
+# merge on
+
+model_features <- model_features %>%
+  left_join(late_filing)
+
+model_features <- model_features %>%
+  mutate(late_filing = case_when(is.na(late_filing) ~ 0, T ~ late_filing))
+
+# export clean data 
+
+write_csv(model_features, here("data/model_features.csv"))
+
+
+```
+
+
+
+
+
+
+
+
+# AMALYSIS 1: SECRECY RED FLAGS
+
+Include chain length distribution
+include all 3 secrecy measure distributions (add mean, and cut offs)
+
+Red-flags if: 
+- if length of chain is top 1% 
+- any of 3 secrecy measures is the max
+- all of the 3 secrecy measures are top 10%
+
+How many companies red-flagged?
+What do there BO features look like, compared to non red-flagged?
+
+
+```{r}
+# PLOT 1 - CHAIN LENGTH DISTRIBUTION  
+
+ggplot(model_features) +
+  geom_histogram(aes(x=num_layers), binwidth = 1, fill = "#66c2a5") + 
+  scale_y_continuous(labels = scales::comma) +
+  theme_light() +
+  xlab("No. of Layers") +
+  ylab("No. of Companies")
+  
+```
+
+```{r}
+# PLOT 2 - AV CAT1 DISTRIBUTION  
+
+ggplot(model_features) +
+  geom_histogram(aes(x=av_cat1), fill = "#fc8d62") + 
+  scale_y_continuous(labels = scales::comma) +
+  theme_light() +
+  xlab("Mean Category 1 Score") +
+  ylab("No. of Companies") +
+  theme(axis.text=element_text(size=12),
+        axis.title = element_text(size=16))
+  
+  
+```
+
+```{r}
+# PLOT 3 - MAX CAT1 DISTRIBUTION 
+
+ggplot(model_features) +
+  geom_histogram(aes(x=max_cat1), fill = "#8da0cb") +
+  scale_y_continuous(labels = scales::comma) +
+  theme_light() +
+  xlab("Max Category 1 Score") +
+  ylab("") +
+ theme(axis.text=element_text(size=12),
+        axis.title = element_text(size=16))
+
+```
+
+```{r}
+# PLOT 4 - AV CAT2 DISTRIBUTION  
+
+ggplot(model_features) +
+  geom_histogram(aes(x=av_cat2), fill = "#fc8d62") + 
+  scale_y_continuous(labels = scales::comma) +
+  theme_light() +
+  xlab("Mean Category 2 Score") +
+  ylab("No. of Companies") +
+  theme(axis.text=element_text(size=12),
+        axis.title = element_text(size=16))
+  
+```
+
+```{r}
+# PLOT 5 - MAX CAT2 DISTRIBUTION 
+
+ggplot(model_features) +
+  geom_histogram(aes(x=max_cat2), fill = "#8da0cb") +
+  scale_y_continuous(labels = scales::comma) +
+  theme_light() +
+  xlab("Max Category 2 Score") +
+  ylab("") +
+  theme(axis.text=element_text(size=12),
+        axis.title = element_text(size=16))
+
+```
+
+```{r}
+# PLOT 6 - AV KI15 DISTRIBUTION  
+
+ggplot(model_features) +
+  geom_histogram(aes(x=av_ki15), fill = "#fc8d62") + 
+  scale_y_continuous(labels = scales::comma) +
+  theme_light() +
+  xlab("Mean KFSI-15 Score") +
+  ylab("No. of Companies") +
+  theme(axis.text=element_text(size=12),
+        axis.title = element_text(size=16))
+  
+```
+
+```{r}
+# PLOT 7 - MAX KI15 DISTRIBUTION 
+
+ggplot(model_features) +
+  geom_histogram(aes(x=max_ki15), fill = "#8da0cb") +
+  scale_y_continuous(labels = scales::comma) +
+  theme_light() +
+  xlab("Max KFSI-15 Score") +
+  ylab("") + 
+  theme(axis.text=element_text(size=12),
+        axis.title = element_text(size=16))
+
+```
+
+```{r}
+# FIND RED-FLAG CUT OFFS
+
+analysis1_data <- model_features
+
+# number of layers
+quantile(analysis1_data$num_layers, probs = 0.99)
+layers_flag <- 8
+
+# cat 1
+cat1_flag_max <- max(secrecy_scores$cat1)
+
+quantile(secrecy_scores$cat1, probs = 0.9)
+cat1_flag_10 <- 75
+
+# cat 2
+cat2_flag_max <- max(secrecy_scores$cat2)
+
+quantile(secrecy_scores$cat2, probs = 0.9)
+cat2_flag_10 <- 82.87
+
+# ki15
+ki15_flag_max <- max(secrecy_scores$ki15)
+
+quantile(secrecy_scores$ki15, probs = 0.9)
+ki15_flag_10 <- 76.075
+
+```
+
+```{r}
+# RED-FLAG COMPANIES
+
+analysis1_data <- analysis1_data %>%
+  # number of layers
+  mutate(red_flag = case_when(num_layers >= layers_flag ~ 1, T ~ 0)) %>%
+  # any secrecy measure max
+  mutate(red_flag = case_when((max_cat1 == cat1_flag_max) |
+                              (max_cat2 == cat2_flag_max) |
+                              (max_ki15 == ki15_flag_max) ~ 1, T ~ red_flag)) %>%
+  # all secrecy top 10% 
+  mutate(red_flag = case_when((max_cat1 == cat1_flag_10) &
+                              (max_cat2 == cat2_flag_10) &
+                              (max_ki15 == ki15_flag_10) ~ 1, T ~ red_flag))
+
+
+```
+
+```{r}
+# ANALYSIS 
+
+# how many companies flagged?
+
+analysis1_flagged <- analysis1_data %>%
+  filter(red_flag == 1)
+
+count(analysis1_flagged)
+
+# % of companies flag
+
+(count(analysis1_flagged)/count(analysis1_data))*100
+
+# BO flagged vs not 
+analysis1_bo_summary <- analysis1_data %>%
+  group_by(red_flag) %>%
+  summarise(bo1 = mean(bo1),
+            bo2 = mean(bo2),
+            bo3 = mean(bo3))
+```
+
+
+# ANALYSIS 2: OUTLIER RED FLAGS
+
+- Run outlier detection 
+- of those that were red-flagged, what do their chain lengths & secrecy measures look like?
+- how does this compared to analysis 1? 
+- how many were red-flagged?
+- what do their BO features look like?
+- correlation between those flagged in analysis 1 & those in analysis 2?
+
+
+Q: do categoricals need to be in dummy form? NO!
+- Can adjust the anomaly score threashold to the government agencies discresion
+- Could adjust to 3% anomalies then compare?
+
+```{r}
+
+# prepare data
+analysis2_data <- model_features %>%
+  select(!c(terminal_bvd, late_filing, sic_section_name_1)) %>%
+  mutate(bo1 = as_factor(bo1)) %>%
+  mutate(bo2 = as_factor(bo2)) %>%
+  mutate(bo3 = as_factor(bo3)) 
+
+set.seed(1)
+
+# train model
+iso = isolationForest$new(sample_size = nrow(analysis2_data))
+iso$fit(analysis2_data)
+
+# get anomaly scores
+scores_train <- iso$predict(analysis2_data)
+
+# merge scores to data
+analysis2_data <- analysis2_data %>% mutate(id = row_number())
+analysis2_data <- analysis2_data %>%
+  left_join(scores_train)
+
+# quantiles of anomaly scores
+quantile(analysis2_data$anomaly_score, probs = 0.97)
+anomaly_flag <- 0.64
+
+# RED FLAG COMPANIES 
+analysis2_data <- analysis2_data %>%
+  # number of layers
+  mutate(red_flag = case_when(anomaly_score >= anomaly_flag ~ 1, T ~ 0))
+
+```
+
+```{r}
+# ANALYSIS 
+
+# BO flagged vs not 
+analysis2_bo_summary <- analysis2_data %>%
+  mutate(bo1 = as.numeric(bo1)-1) %>%
+  mutate(bo2 = as.numeric(bo2)-1) %>%
+  mutate(bo3 = as.numeric(bo3)-1) %>%
+  group_by(red_flag) %>%
+  summarise(bo1 = mean(bo1),
+            bo2 = mean(bo2),
+            bo3 = mean(bo3),
+            max_cat1 = mean(max_cat1),
+            max_cat2 = mean(max_cat2),
+            max_ki15 = mean(max_ki15))
+
+# compare others to flag cut offs in analysis 1
+```
+
+```{r}
+# PLOT 8 - ANOMALY SCORE
+ggplot(analysis2_data) +
+  geom_density(aes(x=anomaly_score), fill = "#e78ac3") + 
+  scale_x_continuous(limits=c(0.5, 0.8)) +
+  geom_vline(xintercept = 0.64, size = 1, colour = "#fc8d62") +
+  theme_light() +
+  xlab("Anomaly Score") +
+  ylab("Density") +
+  annotate(geom = "text", x=0.65, y=70, label = "0.64", colour = "#fc8d62")
+```
+
+
+
+
+
+# ANALYSIS 3: LATE-FILING RED-FLAGS
+
+```{r}
+# prepare data
+analysis3_data <- model_features %>%
+  select(!c(sic_section_name_1)) %>%
+  mutate(bo1 = as_factor(bo1)) %>%
+  mutate(bo2 = as_factor(bo2)) %>%
+  mutate(bo3 = as_factor(bo3)) %>%
+  mutate(late_filing = as_factor(late_filing))
+
+analysis3_data1 <- analysis3_data %>%
+
+set.seed(2)
+
+
+# split into test and train sets
+sample <- sample.split(analysis3_data$late_filing, SplitRatio = .75)
+train_data <- subset(analysis3_data, sample == TRUE)
+test_data  <- subset(analysis3_data, sample == FALSE)
+dim(train_data)
+dim(test_data)
+
+train <- train_data %>%
+  select(!c(terminal_bvd))
+test <- test_data %>%
+  select(!c(terminal_bvd, late_filing))
+
+# train model
+rf <- randomForest(late_filing ~ ., data = train, 
+                   ntree = 500,
+                   mtry = 3)
+rf 
+
+# test
+pred <- predict(rf, newdata = test)
+
+test_y <- test_data %>% 
+  select(late_filing) %>%
+  mutate(late_filing = as_factor(late_filing))
+
+pred_y <- data_frame(pred) %>%
+  mutate(pred = as_factor(pred))
+
+result <- cbind(pred_y, test_y)
+
+result <- result %>%
+  mutate(error = case_when(pred != late_filing ~ 1, T ~ 0))
+
+(sum(result$error)/nrow(result))*100
+
+
+# summary of those late-filing
+analysis3_bo_summary <- analysis3_data %>%
+  mutate(bo1 = as.numeric(bo1)-1) %>%
+  mutate(bo2 = as.numeric(bo2)-1) %>%
+  mutate(bo3 = as.numeric(bo3)-1) %>%
+  mutate(late_filing = as.numeric(late_filing)-1) %>%
+  group_by(late_filing) %>%
+  summarise(bo1 = mean(bo1),
+            bo2 = mean(bo2),
+            bo3 = mean(bo3),
+            max_cat1 = mean(max_cat1),
+            max_cat2 = mean(max_cat2),
+            max_ki15 = mean(max_ki15))
+```
+- error rate of 4.67%
+- good algorithm as non-parametric
+- need other features
+
+```{r}
+# RED-FLAG OVERLAPS
+
+flag_1 <- analysis1_data %>%
+  select(terminal_bvd, red_flag) %>%
+  filter(terminal_bvd %in% test_data$terminal_bvd) %>%
+  mutate(red_flag_1 = red_flag) %>%
+  select(!red_flag)
+
+final_terminal_bvd <- model_features %>%
+  select(terminal_bvd)
+
+flag_2 <- cbind(final_terminal_bvd, analysis2_data) %>%
+  select(terminal_bvd, red_flag) %>%
+  filter(terminal_bvd %in% test_data$terminal_bvd) %>%
+  mutate(red_flag_2 = red_flag) %>%
+  select(!red_flag)
+  
+flag_3 <- cbind(pred_y, test_data) %>%
+  select(terminal_bvd, pred) %>%
+  mutate(red_flag_3 = as.numeric(pred)-1) %>%
+  select(!pred)
+
+all_flags <- flag_1 %>%
+  left_join(flag_2) %>%
+  left_join(flag_3)
+
+all_flags <- all_flags %>%
+  mutate(red_flag_12 = case_when((red_flag_1 == 1) & (red_flag_2 == 1) ~ 1, T ~ 0)) %>%
+  mutate(red_flag_13 = case_when((red_flag_1 == 1) & (red_flag_3 == 1) ~ 1, T ~ 0)) %>%
+  mutate(red_flag_23 = case_when((red_flag_2 == 1) & (red_flag_3 == 1) ~ 1, T ~ 0)) %>%
+  mutate(red_flag_123 = case_when((red_flag_1 == 1) &
+                                  (red_flag_2 == 1) & 
+                                  (red_flag_3 == 1) ~ 1, T ~ 0))
+all_flags_summary <- all_flags %>%
+  summarise(red_flag_1 = sum(red_flag_1)/nrow(all_flags)*100,
+            red_flag_2 = sum(red_flag_2)/nrow(all_flags)*100,
+            red_flag_3 = sum(red_flag_3)/nrow(all_flags)*100,
+            red_flag_12 = sum(red_flag_12)/nrow(all_flags)*100,
+            red_flag_13 = sum(red_flag_13)/nrow(all_flags)*100,
+            red_flag_23 = sum(red_flag_23)/nrow(all_flags)*100,
+            red_flag_123 = sum(red_flag_123)/nrow(all_flags)*100)
+```
+
+
+
+
